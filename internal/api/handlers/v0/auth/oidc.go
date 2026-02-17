@@ -224,6 +224,50 @@ func (h *OIDCHandler) validateExtraClaims(claims *OIDCClaims) error {
 				return fmt.Errorf("claim validation failed: required claim %s not found", key)
 			}
 
+			//Handle array values
+			if actualArray, ok := actualValue.([]any); ok {
+				// Check if expected value is also an array
+				if expectedArray, ok := expectedValue.([]any); ok {
+					// Both are arrays - check if any actual value exists in expected array
+					found := false
+					for _, actVal := range actualArray {
+						for _, expVal := range expectedArray {
+							if actVal == expVal {
+								found = true
+								break
+							}
+						}
+						if found {
+							break
+						}
+					}
+					if !found {
+						return fmt.Errorf("claim validation failed: %s no matching values found between actual %v and expected %v", key, actualArray, expectedArray)
+					}
+					continue
+				}
+
+				// Expected is scalar, actual is array
+				if len(actualArray) == 1 {
+					// Normalize single-element arrays to scalars
+					actualValue = actualArray[0]
+				} else if len(actualArray) > 1 {
+					// Check if expected value exists in the array
+					found := false
+					for _, item := range actualArray {
+						if item == expectedValue {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return fmt.Errorf("claim validation failed: %s expected %v to be in array %v", key, expectedValue, actualArray)
+					}
+					continue
+				}
+			}
+
+			// Compare values if both are scalars 
 			if actualValue != expectedValue {
 				return fmt.Errorf("claim validation failed: %s expected %v, got %v", key, expectedValue, actualValue)
 			}
