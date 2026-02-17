@@ -81,6 +81,184 @@ func TestOIDCHandler_ExchangeToken(t *testing.T) {
 			token:         "invalid-domain-token",
 			expectedError: true,
 		},
+		{
+			name: "successful validation with standard claim 'sub'",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://cigna.oktapreview.com",
+				OIDCClientID:     "api://glbcore",
+				OIDCExtraClaims:  `[{"sub":"0oa2ly86ida9z3vgF0h8"}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						Subject: "0oa2ly86ida9z3vgF0h8",
+						ExtraClaims: map[string]any{
+							"email": "user@cigna.com",
+						},
+					}, nil
+				},
+			},
+			token:         "valid-okta-token",
+			expectedError: false,
+		},
+		{
+			name: "failed validation with wrong standard claim 'sub'",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://cigna.oktapreview.com",
+				OIDCClientID:     "api://glbcore",
+				OIDCExtraClaims:  `[{"sub":"0oa2ly86ida9z3vgF0h8"}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						Subject: "wrong_subject_value",
+						ExtraClaims: map[string]any{
+							"email": "user@cigna.com",
+						},
+					}, nil
+				},
+			},
+			token:         "invalid-sub-token",
+			expectedError: true,
+		},
+		{
+			name: "successful validation with array claim - scalar expected value in array",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://accounts.google.com",
+				OIDCClientID:     "test-client-id",
+				OIDCExtraClaims:  `[{"groups":"admin"}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						ExtraClaims: map[string]any{
+							"groups": []any{"admin", "users", "developers"},
+						},
+					}, nil
+				},
+			},
+			token:         "valid-array-claim-token",
+			expectedError: false,
+		},
+		{
+			name: "failed validation with array claim - scalar not in array",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://accounts.google.com",
+				OIDCClientID:     "test-client-id",
+				OIDCExtraClaims:  `[{"groups":"super-admin"}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						ExtraClaims: map[string]any{
+							"groups": []any{"admin", "users", "developers"},
+						},
+					}, nil
+				},
+			},
+			token:         "invalid-array-claim-token",
+			expectedError: true,
+		},
+		{
+			name: "successful validation with array to array comparison - overlapping values",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://accounts.google.com",
+				OIDCClientID:     "test-client-id",
+				OIDCExtraClaims:  `[{"roles":["admin","moderator"]}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						ExtraClaims: map[string]any{
+							"roles": []any{"admin", "users"},
+						},
+					}, nil
+				},
+			},
+			token:         "valid-array-array-token",
+			expectedError: false,
+		},
+		{
+			name: "failed validation with array to array comparison - no overlapping values",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://accounts.google.com",
+				OIDCClientID:     "test-client-id",
+				OIDCExtraClaims:  `[{"roles":["super-admin","owner"]}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						ExtraClaims: map[string]any{
+							"roles": []any{"admin", "users"},
+						},
+					}, nil
+				},
+			},
+			token:         "invalid-array-array-token",
+			expectedError: true,
+		},
+		{
+			name: "successful validation with single-element array normalization",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://accounts.google.com",
+				OIDCClientID:     "test-client-id",
+				OIDCExtraClaims:  `[{"department":"engineering"}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						ExtraClaims: map[string]any{
+							"department": []any{"engineering"}, // Single element array
+						},
+					}, nil
+				},
+			},
+			token:         "valid-single-array-token",
+			expectedError: false,
+		},
+		{
+			name: "failed validation with missing claim",
+			config: &config.Config{
+				OIDCEnabled:      true,
+				OIDCIssuer:       "https://accounts.google.com",
+				OIDCClientID:     "test-client-id",
+				OIDCExtraClaims:  `[{"required_claim":"expected_value"}]`,
+				OIDCPublishPerms: "*",
+				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			},
+			mockValidator: &MockGenericOIDCValidator{
+				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
+					return &auth.OIDCClaims{
+						ExtraClaims: map[string]any{
+							"other_claim": "some_value",
+						},
+					}, nil
+				},
+			},
+			token:         "missing-claim-token",
+			expectedError: true,
+		},
 	}
 
 	for _, tt := range tests {
