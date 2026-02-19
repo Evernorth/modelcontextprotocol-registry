@@ -82,21 +82,22 @@ func TestOIDCHandler_ExchangeToken(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			name: "successful validation with standard claim 'sub'",
+			name: "successful validation with extra claim 'client_id'",
 			config: &config.Config{
 				OIDCEnabled:      true,
 				OIDCIssuer:       "https://cigna.oktapreview.com",
 				OIDCClientID:     "api://glbcore",
-				OIDCExtraClaims:  `[{"sub":"0oa2ly86ida9z3vgF0h8"}]`,
+				OIDCExtraClaims:  `[{"client_id":"matched_client_id_value"}]`,
 				OIDCPublishPerms: "*",
 				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 			},
 			mockValidator: &MockGenericOIDCValidator{
 				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
 					return &auth.OIDCClaims{
-						Subject: "0oa2ly86ida9z3vgF0h8",
+						Subject: "user-subject-123",
 						ExtraClaims: map[string]any{
-							"email": "user@cigna.com",
+							"email":     "user@cigna.com",
+							"client_id": "matched_client_id_value",
 						},
 					}, nil
 				},
@@ -105,26 +106,27 @@ func TestOIDCHandler_ExchangeToken(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name: "failed validation with wrong standard claim 'sub'",
+			name: "failed validation with wrong extra claim 'client_id'",
 			config: &config.Config{
 				OIDCEnabled:      true,
 				OIDCIssuer:       "https://cigna.oktapreview.com",
 				OIDCClientID:     "api://glbcore",
-				OIDCExtraClaims:  `[{"sub":"0oa2ly86ida9z3vgF0h8"}]`,
+				OIDCExtraClaims:  `[{"client_id":"client_id_value"}]`,
 				OIDCPublishPerms: "*",
 				JWTPrivateKey:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 			},
 			mockValidator: &MockGenericOIDCValidator{
 				validateFunc: func(_ context.Context, _ string) (*auth.OIDCClaims, error) {
 					return &auth.OIDCClaims{
-						Subject: "wrong_subject_value",
+						Subject: "user-subject-123",
 						ExtraClaims: map[string]any{
-							"email": "user@cigna.com",
+							"email":     "user@cigna.com",
+							"client_id": "wrong_client_id_value",
 						},
 					}, nil
 				},
 			},
-			token:         "invalid-sub-token",
+			token:         "invalid-client-id-token",
 			expectedError: true,
 		},
 		{
